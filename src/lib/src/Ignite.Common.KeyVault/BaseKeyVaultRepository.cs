@@ -7,16 +7,19 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.KeyVault;
 using Microsoft.Azure.KeyVault.Models;
+using Microsoft.Extensions.Logging;
 
 namespace Ignite.Common.KeyVault
 {
     public class BaseKeyVaultRepository : IKeyVaultRepository
     {
+        private ILogger _logger;
         protected IKeyVaultClient KeyVaultClient { get; }
         public string Name { get; }
 
-        protected BaseKeyVaultRepository(IKeyVaultClient client, string name)
+        protected BaseKeyVaultRepository(ILogger logger, IKeyVaultClient client, string name)
         {
+            _logger = logger;
             Name = name ?? throw new ArgumentNullException(nameof(name));
             KeyVaultClient = client ?? throw new ArgumentNullException(nameof(client));
         }
@@ -38,14 +41,18 @@ namespace Ignite.Common.KeyVault
             SecretBundle value;
             try
             {
+                _logger.LogInformation($"Looking for secret '{name}'");
                 value = await KeyVaultClient.GetSecretAsync(Name, name);
+                _logger.LogInformation($"Found secret '{name}'");
             }
             catch (KeyVaultErrorException ex)
             {
                 if (ex.Response.StatusCode == HttpStatusCode.NotFound)
                 {
+                    _logger.LogWarning($"Secret '{name}' was not found");
                     return null;
                 }
+                _logger.LogWarning($"Unable to retrieve '{name}'. Message=[{ex.Message}]");
                 throw ex;
             }
             return value;

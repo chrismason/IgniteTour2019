@@ -25,17 +25,24 @@ using Ignite.Data.UXO.Documents;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.ApplicationInsights.Extensibility.PerfCounterCollector.QuickPulse;
+using Microsoft.ApplicationInsights.Extensibility;
+using Microsoft.ApplicationInsights.Extensibility.Implementation.ApplicationId;
+using Microsoft.ApplicationInsights.Channel;
+using Microsoft.ApplicationInsights.WindowsServer.TelemetryChannel;
 
 namespace Ignite.API
 {
     public class Startup
     {
         private readonly ILogger _logger;
+        private readonly ILoggerFactory _loggerFactory;
 
-        public Startup(IConfiguration configuration, ILogger<Startup> logger)
+        public Startup(IConfiguration configuration, ILogger<Startup> logger, ILoggerFactory loggerFactory)
         {
             Configuration = configuration;
             _logger = logger;
+            _loggerFactory = loggerFactory;
         }
 
         public IConfiguration Configuration { get; }
@@ -43,6 +50,16 @@ namespace Ignite.API
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            if (Configuration.GetSection("Telemetry").GetValue<bool>("UseAppInsights"))
+            {
+                if (Configuration.GetSection("Telemetry").GetValue<bool>("UseAzureGov"))
+                {
+                    services.ConfigureTelemetryModule<QuickPulseTelemetryModule>((module, o) => module.QuickPulseServiceEndpoint="https://quickpulse.applicationinsights.us/QuickPulseService.svc");
+                    services.AddSingleton<IApplicationIdProvider, ApplicationInsightsApplicationIdProvider>(_ => new ApplicationInsightsApplicationIdProvider() { ProfileQueryEndpoint = "https://dc.applicationinsights.us/api/profiles/{0}/appId" });
+                    services.AddSingleton<ITelemetryChannel>(_ => new ServerTelemetryChannel() { EndpointAddress = "https://dc.applicationinsights.us/v2/track" });
+                }
+                services.AddApplicationInsightsTelemetry(Configuration.GetSection("Telemetry").GetValue<string>("InstrumentationKey"));
+            }
             KeyVaultRepositoryFactory.Environment = CloudEnvironment.AzureGovernment;
             var sqlSettings = new SqlSettings();
             Configuration.GetSection("Sql").Bind(sqlSettings);
@@ -52,7 +69,7 @@ namespace Ignite.API
             services.AddSingleton(authenticationOptions);
             
             services.Configure<StorageSettings>(Configuration.GetSection("Storage"));
-            services.AddSingleton(KeyVaultRepositoryFactory.GetRepository(Configuration));
+            services.AddSingleton(KeyVaultRepositoryFactory.GetRepository(_loggerFactory, Configuration));
             services.AddTransient<IUXOService, UXOService>();
             services.AddTransient<IUXODocumentService, UXODocumentService>();
             services.AddTransient<IUXODocumentGenerator, UXODocumentGenerator>();

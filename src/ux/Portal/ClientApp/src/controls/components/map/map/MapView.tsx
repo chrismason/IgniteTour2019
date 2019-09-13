@@ -27,8 +27,8 @@ export class MapView extends React.Component<IMapViewProps, IMapState> {
                         basemap: "satellite"
                     }}
                     viewProperties={{
-                        center: [-122.134931, 47.641133],
-                        zoom: 16
+                        center: [-98.585522, 39.833333],
+                        zoom: 5
                     }}
                 >
                     {this.renderUXOLayer()}
